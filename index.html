@@ -14,7 +14,7 @@
   <link
     href="https://fonts.googleapis.com/css2?family=Oswald:wght@500;600&family=Inter:wght@400;500&family=Space+Mono:wght@400;700&display=swap"
     rel="stylesheet">
-  <link rel="stylesheet" href="style.css">
+  <link rel="stylesheet" href="style.css?v=5">
 </head>
 
 <body class="dark">
@@ -597,31 +597,37 @@
       // Scroll Animation
       const heroContainer = document.getElementById("hero-scroll-container");
       
-      gsap.to(".hero-left", {
-        x: -300,
-        opacity: 0,
-        filter: "blur(12px)",
-        ease: "none",
-        scrollTrigger: {
-          trigger: heroContainer,
-          start: "top top",
-          end: "+=1500", // roughly the third scroll frame
-          scrub: true
+      gsap.fromTo(".hero-left",
+        { x: 0, opacity: 1, filter: "blur(0px)" },
+        {
+          x: -300,
+          opacity: 0,
+          filter: "blur(12px)",
+          ease: "none",
+          scrollTrigger: {
+            trigger: heroContainer,
+            start: "top top",
+            end: "+=1500", // roughly the third scroll frame
+            scrub: true
+          }
         }
-      });
+      );
 
-      gsap.to(".hero-right", {
-        x: 300,
-        opacity: 0,
-        filter: "blur(12px)",
-        ease: "none",
-        scrollTrigger: {
-          trigger: heroContainer,
-          start: "top top",
-          end: "+=1500",
-          scrub: true
+      gsap.fromTo(".hero-right",
+        { x: 0, opacity: 1, filter: "blur(0px)" },
+        {
+          x: 300,
+          opacity: 0,
+          filter: "blur(12px)",
+          ease: "none",
+          scrollTrigger: {
+            trigger: heroContainer,
+            start: "top top",
+            end: "+=1500",
+            scrub: true
+          }
         }
-      });
+      );
       
       // Parallax wrapper adjustment (optional, mostly scrub handles this, but a slight y parallax)
       gsap.to("#hero-typography", {

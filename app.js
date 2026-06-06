@@ -353,26 +353,33 @@ function preloadFrames() {
   const fill   = document.getElementById('loading-bar-fill');
   const overlay= document.getElementById('loading-overlay');
   let   next   = 0;
+  const isMobile = window.innerWidth <= 768;
+  const step   = isMobile ? 6 : 1;
+  const targetCount = Math.ceil(TOTAL_FRAMES / step);
+  loadedCount = 0;
 
   function kick() {
     if (next >= TOTAL_FRAMES) return;
-    const i = next++;
+    
+    const i = next;
+    next += step;
+
     const img = new Image();
     img.onload = () => {
       frames[i] = img;
       loadedCount++;
-      if (fill) fill.style.width = (loadedCount / TOTAL_FRAMES * 100) + '%';
+      if (fill) fill.style.width = (loadedCount / targetCount * 100) + '%';
       if (loadedCount === 1) drawFrame(0);
-      if (i === curFrame) drawFrame(curFrame); // Immediately draw if this is the target frame on refresh
-      if (loadedCount === 15) showScrollHint();
-      if (loadedCount >= TOTAL_FRAMES && overlay) overlay.classList.add('hidden');
+      if (curFrame >= i && curFrame < i + step) drawFrame(curFrame); // Immediately draw if this is the target frame on refresh
+      if (loadedCount === Math.min(15, targetCount)) showScrollHint();
+      if (loadedCount >= targetCount && overlay) overlay.classList.add('hidden');
       kick();
     };
     img.onerror = () => { loadedCount++; kick(); };
     img.src = frameSrc(i);
   }
 
-  for (let i = 0; i < CONCURRENT_LOAD; i++) kick();
+  for (let i = 0; i < (isMobile ? 3 : CONCURRENT_LOAD); i++) kick();
 }
 
 function drawFrame(index) {

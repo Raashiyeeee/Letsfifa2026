@@ -1,39 +1,27 @@
 const http = require('http');
 const https = require('https');
 const { WebSocketServer } = require('ws');
-const sqlite3 = require('sqlite3').verbose();
+const { Pool } = require('pg');
 const path = require('path');
 const fs = require('fs');
 
-const DB_PATH = path.join(__dirname, 'football.db');
-const db = new sqlite3.Database(DB_PATH);
+const pool = new Pool({
+  connectionString: process.env.DATABASE_URL || 'postgres://fifa_user:fifa_password@localhost:5432/fifa_db'
+});
 
-// Promise helpers for SQLite
-function runDb(query, params = []) {
-  return new Promise((resolve, reject) => {
-    db.run(query, params, function(err) {
-      if (err) reject(err);
-      else resolve(this);
-    });
-  });
+// Promise helpers for PostgreSQL
+async function runDb(query, params = []) {
+  return pool.query(query, params);
 }
 
-function allDb(query, params = []) {
-  return new Promise((resolve, reject) => {
-    db.all(query, params, (err, rows) => {
-      if (err) reject(err);
-      else resolve(rows);
-    });
-  });
+async function allDb(query, params = []) {
+  const res = await pool.query(query, params);
+  return res.rows;
 }
 
-function getDb(query, params = []) {
-  return new Promise((resolve, reject) => {
-    db.get(query, params, (err, row) => {
-      if (err) reject(err);
-      else resolve(row);
-    });
-  });
+async function getDb(query, params = []) {
+  const res = await pool.query(query, params);
+  return res.rows[0];
 }
 
 const STADIUM_OFFSETS = {
@@ -68,7 +56,7 @@ async function initDb() {
       stadium_id INTEGER,
       local_date TEXT,
       finished TEXT,
-      last_updated DATETIME DEFAULT CURRENT_TIMESTAMP
+      last_updated TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
@@ -92,8 +80,8 @@ async function initDb() {
 
   await runDb(`
     CREATE TABLE IF NOT EXISTS sync_logs (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      timestamp DATETIME DEFAULT CURRENT_TIMESTAMP,
+      id SERIAL PRIMARY KEY,
+      timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
       status TEXT,
       primary_status TEXT,
       secondary_status TEXT,
@@ -107,18 +95,18 @@ async function initDb() {
     CREATE TABLE IF NOT EXISTS raw_api_responses (
       api_name TEXT PRIMARY KEY,
       response_json TEXT,
-      last_fetched DATETIME DEFAULT CURRENT_TIMESTAMP
+      last_fetched TIMESTAMP DEFAULT CURRENT_TIMESTAMP
     )
   `);
 
   await runDb(`
     CREATE TABLE IF NOT EXISTS subscriptions (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      id SERIAL PRIMARY KEY,
       email TEXT UNIQUE NOT NULL
     )
   `);
 
-  console.log('SQLite Database schema initialized.');
+  console.log('PostgreSQL Database schema initialized.');
 }
 
 // Bootstrap Data from worldcup26.ir if DB is empty
@@ -144,7 +132,7 @@ async function bootstrapDb() {
     if (stadiumsData && stadiumsData.stadiums) {
       for (const s of stadiumsData.stadiums) {
         await runDb(
-          'INSERT OR REPLACE INTO stadiums (id, name_en, city_en, image) VALUES (?, ?, ?, ?)',
+          'INSERT INTO stadiums (id, name_en, city_en, image) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name_en = EXCLUDED.name_en, city_en = EXCLUDED.city_en, image = EXCLUDED.image',
           [parseInt(s.id), s.name_en, s.city_en, s.image]
         );
       }
@@ -164,7 +152,7 @@ async function bootstrapDb() {
     if (teamsData && teamsData.teams) {
       for (const t of teamsData.teams) {
         await runDb(
-          'INSERT OR REPLACE INTO teams (id, name_en, flag, group_name) VALUES (?, ?, ?, ?)',
+          'INSERT INTO teams (id, name_en, flag, group_name) VALUES ($1, $2, $3, $4) ON CONFLICT (id) DO UPDATE SET name_en = EXCLUDED.name_en, flag = EXCLUDED.flag, group_name = EXCLUDED.group_name',
           [parseInt(t.id), t.name_en, t.flag, t.group]
         );
         teamMap[t.id] = t;
@@ -225,9 +213,16 @@ async function bootstrapDb() {
         const awayScore = status !== 'upcoming' ? parseInt(g.away_score) : null;
 
         await runDb(
-          `INSERT OR REPLACE INTO matches 
+          `INSERT INTO matches 
           (id, stage, group_name, home_team, away_team, home_crest, away_crest, stadium, city, utc_date, status, home_score, away_score, elapsed_time, source_api, confidence_score, home_team_id, away_team_id, stadium_id, local_date, finished) 
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+          ON CONFLICT (id) DO UPDATE SET
+            stage = EXCLUDED.stage, group_name = EXCLUDED.group_name, home_team = EXCLUDED.home_team, away_team = EXCLUDED.away_team,
+            home_crest = EXCLUDED.home_crest, away_crest = EXCLUDED.away_crest, stadium = EXCLUDED.stadium, city = EXCLUDED.city,
+            utc_date = EXCLUDED.utc_date, status = EXCLUDED.status, home_score = EXCLUDED.home_score, away_score = EXCLUDED.away_score,
+            elapsed_time = EXCLUDED.elapsed_time, source_api = EXCLUDED.source_api, confidence_score = EXCLUDED.confidence_score,
+            home_team_id = EXCLUDED.home_team_id, away_team_id = EXCLUDED.away_team_id, stadium_id = EXCLUDED.stadium_id,
+            local_date = EXCLUDED.local_date, finished = EXCLUDED.finished`,
           [
             parseInt(g.id),
             g.type === 'group' ? 'Group Stage' : g.type,
@@ -253,7 +248,7 @@ async function bootstrapDb() {
           ]
         );
       }
-      console.log(`Successfully bootstrapped ${gamesData.games.length} matches in SQLite database.`);
+      console.log(`Successfully bootstrapped ${gamesData.games.length} matches in PostgreSQL database.`);
     }
   } catch (err) {
     console.error('Failed to bootstrap database. Running with empty/existing structures.', err);
@@ -271,7 +266,7 @@ const simulatedOutages = {
 
 const API_KEYS = {
   'api-football': process.env.API_FOOTBALL_KEY || null,
-  'football-data': process.env.FOOTBALL_DATA_KEY || '166a9657f2c648b5b87df69fa0ca8c67',
+  'football-data': process.env.FOOTBALL_DATA_KEY || null,
   'sportmonks': process.env.SPORTMONKS_KEY || null
 };
 
@@ -518,7 +513,7 @@ async function runSyncJob() {
     rawApiFootball = await fetchFromApiFootball();
     primaryStatus = 'SUCCESS';
     await runDb(
-      'INSERT OR REPLACE INTO raw_api_responses (api_name, response_json, last_fetched) VALUES (?, ?, CURRENT_TIMESTAMP)',
+      'INSERT INTO raw_api_responses (api_name, response_json, last_fetched) VALUES ($1, $2, CURRENT_TIMESTAMP) ON CONFLICT (api_name) DO UPDATE SET response_json = EXCLUDED.response_json, last_fetched = CURRENT_TIMESTAMP',
       ['api-football', JSON.stringify(rawApiFootball)]
     );
   } catch (err) {
@@ -530,7 +525,7 @@ async function runSyncJob() {
     rawFootballData = await fetchFromFootballData();
     secondaryStatus = 'SUCCESS';
     await runDb(
-      'INSERT OR REPLACE INTO raw_api_responses (api_name, response_json, last_fetched) VALUES (?, ?, CURRENT_TIMESTAMP)',
+      'INSERT INTO raw_api_responses (api_name, response_json, last_fetched) VALUES ($1, $2, CURRENT_TIMESTAMP) ON CONFLICT (api_name) DO UPDATE SET response_json = EXCLUDED.response_json, last_fetched = CURRENT_TIMESTAMP',
       ['football-data', JSON.stringify(rawFootballData)]
     );
   } catch (err) {
@@ -542,7 +537,7 @@ async function runSyncJob() {
     rawSportmonks = await fetchFromSportmonks();
     backupStatus = 'SUCCESS';
     await runDb(
-      'INSERT OR REPLACE INTO raw_api_responses (api_name, response_json, last_fetched) VALUES (?, ?, CURRENT_TIMESTAMP)',
+      'INSERT INTO raw_api_responses (api_name, response_json, last_fetched) VALUES ($1, $2, CURRENT_TIMESTAMP) ON CONFLICT (api_name) DO UPDATE SET response_json = EXCLUDED.response_json, last_fetched = CURRENT_TIMESTAMP',
       ['sportmonks', JSON.stringify(rawSportmonks)]
     );
   } catch (err) {
@@ -677,14 +672,14 @@ async function runSyncJob() {
       updatedCount++;
       await runDb(
         `UPDATE matches SET
-          status            = ?,
-          home_score        = ?,
-          away_score        = ?,
-          elapsed_time      = ?,
-          source_api        = ?,
-          confidence_score  = ?,
+          status            = $1,
+          home_score        = $2,
+          away_score        = $3,
+          elapsed_time      = $4,
+          source_api        = $5,
+          confidence_score  = $6,
           last_updated      = CURRENT_TIMESTAMP
-        WHERE id = ?`,
+        WHERE id = $7`,
         [
           selectedStatus,
           selectedScore.home,
@@ -728,7 +723,7 @@ async function runSyncJob() {
 
   await runDb(
     `INSERT INTO sync_logs (status, primary_status, secondary_status, backup_status, active_source, details) 
-    VALUES (?, ?, ?, ?, ?, ?)`,
+    VALUES ($1, $2, $3, $4, $5, $6)`,
     [
       statusSummary,
       primaryStatus,
@@ -878,7 +873,7 @@ async function progressBracket() {
     if (changed) {
       progressedCount++;
       await runDb(
-        `UPDATE matches SET home_team = ?, home_crest = ?, away_team = ?, away_crest = ? WHERE id = ?`,
+        `UPDATE matches SET home_team = $1, home_crest = $2, away_team = $3, away_crest = $4 WHERE id = $5`,
         [hName, hCrest, aName, aCrest, m.id]
       );
     }
@@ -962,6 +957,11 @@ const lastMsgTime = {};
 function containsProfanity(text) {
   const cleanText = text.toLowerCase();
   return FORBIDDEN_WORDS.some(word => cleanText.includes(word));
+}
+
+function containsLink(text) {
+  const safeUrlRegex = /(https?:\/\/[^\s]+)|(www\.[^\s]+)|([a-zA-Z0-9-]+\.(com|org|net|io|co|us|uk|me|info|tv|xyz)(\/[^\s]*)?)/i;
+  return safeUrlRegex.test(text);
 }
 
 function broadcastWs(payload, senderWs = null) {
@@ -1119,19 +1119,13 @@ const server = http.createServer(async (req, res) => {
       const tCount = await getDb('SELECT COUNT(*) as count FROM teams');
       const sCount = await getDb('SELECT COUNT(*) as count FROM stadiums');
       const lCount = await getDb('SELECT COUNT(*) as count FROM sync_logs');
-      let fileSize = 0;
-      try {
-        const stats = fs.statSync(DB_PATH);
-        fileSize = stats.size;
-      } catch(e) {}
-      
       res.writeHead(200, { 'Content-Type': 'application/json' });
       return res.end(JSON.stringify({
-        matches: mCount.count,
-        teams: tCount.count,
-        stadiums: sCount.count,
-        logs: lCount.count,
-        fileSize: fileSize
+        matches: parseInt(mCount.count, 10) || 0,
+        teams: parseInt(tCount.count, 10) || 0,
+        stadiums: parseInt(sCount.count, 10) || 0,
+        logs: parseInt(lCount.count, 10) || 0,
+        fileSize: 0 // Local DB file size no longer applies for Postgres
       }));
     } catch (e) {
       res.writeHead(500);
@@ -1152,11 +1146,11 @@ const server = http.createServer(async (req, res) => {
         }
 
         try {
-          await runDb('INSERT INTO subscriptions (email) VALUES (?)', [email]);
+          await runDb('INSERT INTO subscriptions (email) VALUES ($1)', [email]);
           res.writeHead(200, { 'Content-Type': 'application/json' });
           return res.end(JSON.stringify({ success: true }));
         } catch (dbErr) {
-          if (dbErr.message.includes('UNIQUE constraint failed')) {
+          if (dbErr.code === '23505') { // Postgres unique violation code
             res.writeHead(409, { 'Content-Type': 'application/json' });
             return res.end(JSON.stringify({ error: 'This email is already registered' }));
           }
@@ -1269,7 +1263,7 @@ const server = http.createServer(async (req, res) => {
       res.writeHead(404);
       return res.end('Not found');
     }
-    const filePath = path.join('/home/blaze/Videos/fifiaa_frames', filename);
+    const filePath = path.join(process.env.FRAMES_PATH || path.join(__dirname, 'fifiaa_frames'), filename);
     fs.readFile(filePath, (err, data) => {
       if (err) {
         res.writeHead(404);
@@ -1421,6 +1415,26 @@ wss.on('connection', async (ws, req) => {
       return;
     }
     
+    if (containsLink(msgObj.text || '')) {
+      ipViolations[ip] = (ipViolations[ip] || 0) + 1;
+      
+      if (ipViolations[ip] > 3) {
+        bannedIps.add(ip);
+        ws.send(JSON.stringify({
+          sender: 'System',
+          text: '❌ You have been permanently banned from the chat for repeated policy violations.'
+        }));
+        ws.close();
+        return;
+      }
+      
+      ws.send(JSON.stringify({
+        sender: 'System',
+        text: `⚠️ Warning: Links are not allowed in the chat. Violation ${ipViolations[ip]}/3. You will be banned after 3 violations.`
+      }));
+      return;
+    }
+    
     lastMsgTime[ip] = now;
     delete msgObj.devPasscode;
     broadcastWs(msgObj);
@@ -1446,7 +1460,7 @@ async function boot() {
   const PORT = process.env.PORT || 7789;
   server.listen(PORT, () => {
     console.log(`Proxy, WebSocket and Static server running on port ${PORT}.`);
-    console.log('  → SQLite DB    : football.db');
+    console.log('  → PostgreSQL DB: Active via DATABASE_URL');
     console.log('  → Sync interval: adaptive (30s live / 300s off-peak)');
     console.log('  → APIs         : API-Football (3) > Football-Data (2) > Sportmonks (1)');
   });

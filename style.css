@@ -50,6 +50,7 @@
 html {
   scroll-behavior: smooth;
   -webkit-font-smoothing: antialiased;
+  overscroll-behavior-y: auto !important;
 }
 
 body {
@@ -57,9 +58,9 @@ body {
   color: var(--text-1);
   font-family: var(--font-b);
   overflow-x: hidden;
+  overscroll-behavior-y: auto !important;
   cursor: default;
   transition: background 0.35s var(--ease), color 0.35s var(--ease);
-  overscroll-behavior-y: none;
 }
 
 a { color: inherit; text-decoration: none; }
@@ -605,7 +606,6 @@ body.light .moon-icon { display: block; }
   background: var(--bg);
   padding: 0.75rem 0;
   margin: 0 -2rem;
-  padding-inline: 2rem;
   border-bottom: 1px solid var(--border);
   margin-bottom: 0.5rem;
 }
@@ -617,6 +617,7 @@ body.light .moon-icon { display: block; }
   scrollbar-width: none;
   -ms-overflow-style: none;
   padding-bottom: 2px;
+  padding-inline: 2rem;
 }
 
 #date-tabs::-webkit-scrollbar { display: none; }
@@ -966,7 +967,10 @@ body.light .moon-icon { display: block; }
   :root { --nav-h: 56px; }
   #main-nav { padding: env(safe-area-inset-top) max(1rem, env(safe-area-inset-right)) 0 max(1rem, env(safe-area-inset-left)); }
   .container { padding: 0 1rem; }
-  #date-tabs-wrapper { margin-inline: -1rem; padding-inline: 1rem; }
+  #date-tabs-wrapper { margin-inline: -1rem; padding-inline: 0; }
+  #date-tabs { padding-inline: 1rem; }
+  .view-toggle-wrapper { margin-inline: -1rem; padding-inline: 1rem; }
+  .view-toggle { margin: 0; }
   .schedule-header { flex-direction: column; align-items: flex-start; }
   .schedule-stats { gap: 1.5rem; }
   .cards-grid { grid-template-columns: 1fr; }
@@ -1689,15 +1693,20 @@ kbd {
 /* View Toggle */
 .view-toggle-wrapper {
   display: flex;
-  justify-content: center;
   margin-bottom: 2rem;
+  overflow-x: auto;
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
 }
+.view-toggle-wrapper::-webkit-scrollbar { display: none; }
 .view-toggle {
   display: flex;
   background: rgba(255, 255, 255, 0.05);
   border-radius: 30px;
   padding: 4px;
   border: 1px solid rgba(255, 255, 255, 0.1);
+  width: max-content;
+  margin: 0 auto;
 }
 .view-btn {
   background: transparent;
@@ -1991,12 +2000,16 @@ kbd {
 
 @media (max-width: 768px) {
   .chat-container {
-    grid-template-columns: 1fr;
-    height: auto;
+    grid-template-columns: minmax(0, 1fr);
+    height: 700px;
   }
   .chat-sidebar {
     border-right: none;
     border-bottom: 1px solid var(--border);
+    padding: 1rem;
+  }
+  .chat-input-area {
+    padding: 0.75rem 1rem;
   }
 }
 
@@ -2030,7 +2043,8 @@ kbd {
   padding: 0.45rem 0.75rem;
   color: var(--text-1);
   font-size: 0.8rem;
-  width: 100%;
+  flex: 1;
+  min-width: 0;
   outline: none;
 }
 
@@ -2188,6 +2202,7 @@ kbd {
   color: var(--text-1);
   font-size: 0.85rem;
   outline: none;
+  min-width: 0;
 }
 
 #chat-msg-input:focus {
@@ -2793,24 +2808,41 @@ kbd {
 
 /* ── Mobile Adjustments ── */
 @media (max-width: 640px) {
+  .loc-img {
+    height: 480px;
+    object-fit: cover;
+    object-position: center;
+  }
   .loc-overlay {
-    padding: 1.2rem;
+    padding: 1.5rem;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
   }
   .loc-top-left {
-    top: 1.2rem;
-    left: 1.2rem;
-    max-width: 60%;
+    position: relative;
+    top: auto; left: auto;
+    max-width: 90%;
   }
   .loc-bottom-right {
-    bottom: 1.2rem;
-    right: 1.2rem;
-    align-items: flex-end;
+    position: relative;
+    bottom: auto; right: auto;
+    align-items: flex-start;
+    background: rgba(255, 255, 255, 0.1);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    padding: 1.25rem;
+    border-radius: 16px;
+    width: 100%;
+    margin-top: 2rem;
+    border: 1px solid rgba(255, 255, 255, 0.15);
   }
-  .loc-cities-list  { align-items: flex-end; }
-  .loc-match-count  { text-align: right; }
+  .loc-info-block { text-align: left; }
+  .loc-cities-list  { align-items: flex-start; flex-direction: row; flex-wrap: wrap; gap: 0.5rem; }
+  .loc-match-count  { text-align: left; }
   .loc-info-heading,
-  .loc-info-label   { text-align: right; }
-  .loc-city         { text-align: right; }
+  .loc-info-label   { text-align: left; }
+  .loc-city         { text-align: left; font-size: 0.8rem; border: 1px solid rgba(255,255,255,0.2); padding: 0.2rem 0.6rem; border-radius: 20px;}
 }
 
 /* ── Apple-Inspired Premium Hero Typography ── */
