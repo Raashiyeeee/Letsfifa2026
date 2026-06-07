@@ -22,13 +22,13 @@ An interactive, real-time web application dedicated to the 2026 FIFA World Cup. 
 * **Developer Sync Console**: An admin dashboard to monitor multi-API confidence rankings and database statistics, with the ability to simulate API outages.
 * **Dark/Light Mode**: User-toggleable themes that persist via local storage.
 * **Email Notifications**: Subscription system for automatic match event alerts.
+* **Fifu Chatbot**: An automated chatbot integrated directly into the Fan Chat to provide live updates, announcements, and engage with fans.
 
 ## 🔒 Security
 
-* **Admin Authentication**: The Developer Sync Console requires an `x-admin-key` to prevent unauthorized access to administrative functions.
 * **Chat Message Sanitization**: All user inputs in the Fan Chat are strictly HTML-escaped to prevent Cross-Site Scripting (XSS) injection attacks.
-* **Dev Passcode Encryption**: Simulating live match scenarios requires a verified SHA-256 hashed passcode.
-* **Environment Variables**: Sensitive data such as the `DATABASE_URL` and third-party API keys (`API_FOOTBALL_KEY`, `FOOTBALL_DATA_KEY`, `SPORTMONKS_KEY`) are managed securely via environment variables and are never exposed to the client.
+* **Ban Security System**: An automated moderation system in the chat that detects and bans malicious users or spammers to maintain a safe environment.
+* **Attack Protection**: Implemented rate limiting, connection throttling, and payload validation to safeguard the WebSocket and proxy servers against DDoS and other malicious attacks.
 
 ## 🚀 How to Run Locally
 
